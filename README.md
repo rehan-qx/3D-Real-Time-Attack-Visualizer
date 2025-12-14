@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🌐 DEFCON 1: CYBER THREAT GLOBE
+# 🌐 DEFCON : CYBER THREAT GLOBE
 ### A Cinematic 3D Real-Time Attack Visualizer
 
 ![Three.js](https://img.shields.io/badge/Three.js-WebGL-white?style=for-the-badge&logo=three.js&logoColor=black)
