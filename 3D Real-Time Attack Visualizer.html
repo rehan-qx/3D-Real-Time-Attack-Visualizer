@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>DEFCON 1: Cyber Threat Globe</title>
+    <style>
+        /* --- 1. THE CRT MONITOR AESTHETIC --- */
+        body { margin: 0; overflow: hidden; background-color: #050505; font-family: 'Courier New', Courier, monospace; }
+        
+        /* The scanline overlay */
+        #crt-overlay {
+            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 2px, 3px 100%;
+            pointer-events: none; /* Let clicks pass through */
+            z-index: 10;
+        }
+
+        /* Screen curvature vignette */
+        #vignette {
+            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: radial-gradient(circle, rgba(0,0,0,0) 60%, rgba(0,0,0,1) 100%);
+            pointer-events: none;
+            z-index: 11;
+        }
+
+        /* --- 2. HOLOGRAPHIC TERMINAL UI --- */
+        #terminal {
+            position: absolute;
+            display: none; /* Hidden by default */
+            width: 300px;
+            background: rgba(0, 20, 0, 0.85);
+            border: 1px solid #00ff41;
+            padding: 10px;
+            color: #00ff41;
+            box-shadow: 0 0 15px #00ff41;
+            font-size: 12px;
+            z-index: 5;
+            backdrop-filter: blur(4px);
+        }
+        
+        .term-header { border-bottom: 1px solid #00ff41; margin-bottom: 5px; font-weight: bold; display: flex; justify-content: space-between; }
+        .term-body { height: 100px; overflow: hidden; position: relative; }
+        .scrolling-text { position: absolute; bottom: 0; width: 100%; }
+        
+        /* Blinking cursor effect */
+        .cursor { display: inline-block; width: 8px; height: 14px; background: #00ff41; animation: blink 1s infinite; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+        #hud {
+            position: absolute; top: 20px; left: 20px; color: #00ff41; z-index: 5;
+            text-shadow: 0 0 5px #004400;
+        }
+        
+        #hud h1 { margin-bottom: 5px; letter-spacing: 2px; }
+        
+        .author-tag {
+            font-size: 14px;
+            color: #008f11; /* Slightly darker green */
+            margin-top: 0;
+            margin-bottom: 20px;
+            font-weight: bold;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="crt-overlay"></div>
+    <div id="vignette"></div>
+    
+    <div id="hud">
+        <h1>GLOBAL THREAT VECTOR // MONITORING</h1>
+        
+        <p class="author-tag">> AUTH_ID: <span style="color: #fff;">N1Xr00t~%^#</span> [ROOT_ACCESS]</p>
+        
+        <p>SYSTEM STATUS: <span style="color:red; animation: blink 0.5s infinite">ACTIVE ATTACK DETECTED</span></p>
+    </div>
+
+    <div id="terminal">
+        <div class="term-header">
+            <span>TARGET_LOCK</span>
+            <span>[SECURE]</span>
+        </div>
+        <div class="term-body" id="term-content">
+            </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script type="x-shader/x-vertex" id="earthVertex">
+        varying vec2 vUv;
+        varying vec3 vNormal;
+        varying vec3 vPos;
+        
+        void main() {
+            vUv = uv;
+            vNormal = normalize(normalMatrix * normal);
+            vPos = position;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+    </script>
+    <script type="x-shader/x-fragment" id="earthFragment">
+        uniform float uTime;
+        uniform vec3 uColor;
+        varying vec2 vUv;
+        varying vec3 vNormal;
+        
+        // Impact data: xy = lat/lon (mapped to UV), z = time of impact, w = intensity
+        uniform vec4 uImpacts[10]; 
+
+        void main() {
+            // Base grid pattern
+            float gridX = step(0.98, fract(vUv.x * 60.0));
+            float gridY = step(0.98, fract(vUv.y * 30.0));
+            float grid = max(gridX, gridY);
+
+            vec3 finalColor = uColor * (0.1 + grid * 0.5);
+
+            // Rim lighting (Fresnel)
+            float intensity = pow(0.6 - dot(vNormal, vec3(0, 0, 1.0)), 4.0);
+            finalColor += uColor * intensity * 2.0;
+
+            // Ripple logic
+            for(int i=0; i<10; i++){
+                if(uImpacts[i].w > 0.0){
+                    // Distance from impact center (using UVs for cheap approximation)
+                    // Note: In a real production app, use 3D distance
+                    float dist = distance(vUv, uImpacts[i].xy);
+                    
+                    // Expanding ring
+                    float waveAge = uTime - uImpacts[i].z;
+                    float waveRadius = waveAge * 0.5; // Speed
+                    
+                    if(waveAge > 0.0 && waveAge < 2.0){
+                        float ring = smoothstep(0.01, 0.0, abs(dist - waveRadius));
+                        // Fade out over time
+                        float fade = 1.0 - (waveAge / 2.0);
+                        finalColor += vec3(1.0, 0.2, 0.2) * ring * fade * 2.0;
+                    }
+                }
+            }
+
+            gl_FragColor = vec4(finalColor, 0.9);
+        }
+    </script>
+
+    <script type="x-shader/x-vertex" id="arcVertex">
+        attribute float aProgress; // 0 to 1 along the line
+        uniform float uTime;
+        varying float vOpacity;
+        
+        void main() {
+            // Animate a "packet" moving along the line
+            // We want a glowing head moving from 0 to 1
+            float speed = 1.0;
+            float currentPos = fract(uTime * speed + aProgress); // Offset animations
+            
+            // Calculate distance between vertex and packet
+            float dist = abs(aProgress - currentPos);
+            
+            // Wrap around fix
+            if(dist > 0.5) dist = 1.0 - dist;
+
+            // Make it glow if close to the packet
+            vOpacity = smoothstep(0.1, 0.0, dist);
+
+            vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+            gl_Position = projectionMatrix * mvPosition;
+        }
+    </script>
+    <script type="x-shader/x-fragment" id="arcFragment">
+        varying float vOpacity;
+        void main() {
+            if(vOpacity < 0.01) discard;
+            gl_FragColor = vec4(1.0, 0.0, 0.0, vOpacity); // Red laser
+        }
+    </script>
+
+    <script>
+        // --- CONFIG ---
+        const SCENE_CONFIG = {
+            color: 0x00ff41, // Hacker Green
+            bgColor: 0x050505
+        };
+
+        let scene, camera, renderer, globe, controls;
+        let attackLines = [];
+        let impacts = []; // Stores active ripples
+        
+        // Mock Data for the terminal
+        const LOGS = [
+            "PACKET_INTERCEPT: PORT 443 [ENCRYPTED]",
+            "WARNING: BRUTE FORCE DETECTED",
+            "TRACING ROUTE... 192.168.X.X",
+            "SQL INJECTION ATTEMPT BLOCKED",
+            "DOWNLOADING PAYLOAD...",
+            "SIGNATURE MATCH: APT-29",
+            "REGISTRY KEY MODIFIED",
+            "OUTBOUND TRAFFIC SPIKE"
+        ];
+
+        function init() {
+            // 1. Setup
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(SCENE_CONFIG.bgColor, 0.03);
+            
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 1000);
+            camera.position.z = 18;
+            camera.position.y = 5;
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.body.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.autoRotate = true;
+            controls.autoRotateSpeed = 0.5;
+            controls.enablePan = false;
+
+            // 2. The Globe
+            createGlobe();
+
+            // 3. Stars / Background Data
+            createParticles();
+
+            // 4. Events
+            window.addEventListener('resize', onResize);
+            window.addEventListener('mousemove', onMouseMove);
+            
+            // Start Loop
+            animate();
+
+            // Start Random Attacks
+            setInterval(launchRandomAttack, 800);
+        }
+
+        // --- GLOBE CREATION ---
+        function createGlobe() {
+            const geometry = new THREE.SphereGeometry(5, 64, 64);
+            
+            // Initialize impact array (10 slots)
+            for(let i=0; i<10; i++) impacts.push(new THREE.Vector4(0,0,0,0));
+
+            const material = new THREE.ShaderMaterial({
+                uniforms: {
+                    uTime: { value: 0 },
+                    uColor: { value: new THREE.Color(SCENE_CONFIG.color) },
+                    uImpacts: { value: impacts }
+                },
+                vertexShader: document.getElementById('earthVertex').textContent,
+                fragmentShader: document.getElementById('earthFragment').textContent,
+                transparent: true,
+                side: THREE.FrontSide
+            });
+
+            globe = new THREE.Mesh(geometry, material);
+            scene.add(globe);
+
+            // Add an inner "Black Body" so we don't see lines through the back of the earth
+            const blockerGeo = new THREE.SphereGeometry(4.95, 32, 32);
+            const blockerMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+            const blocker = new THREE.Mesh(blockerGeo, blockerMat);
+            scene.add(blocker);
+        }
+
+        // --- PARTICLE FIELD ---
+        function createParticles() {
+            const geom = new THREE.BufferGeometry();
+            const counts = 2000;
+            const pos = new Float32Array(counts * 3);
+            
+            for(let i=0; i<counts*3; i++) {
+                pos[i] = (Math.random() - 0.5) * 50;
+            }
+            
+            geom.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+            const mat = new THREE.PointsMaterial({ color: 0x004400, size: 0.1 });
+            const points = new THREE.Points(geom, mat);
+            scene.add(points);
+        }
+
+        // --- ATTACK SYSTEM ---
+        function latLonToVector3(lat, lon, radius) {
+            const phi = (90 - lat) * (Math.PI / 180);
+            const theta = (lon + 180) * (Math.PI / 180);
+            const x = -(radius * Math.sin(phi) * Math.cos(theta));
+            const z = (radius * Math.sin(phi) * Math.sin(theta));
+            const y = (radius * Math.cos(phi));
+            return new THREE.Vector3(x, y, z);
+        }
+
+        // Helper to get random coord on sphere
+        function getRandomCoord() {
+            return {
+                lat: (Math.random() - 0.5) * 160,
+                lon: (Math.random() - 0.5) * 360
+            };
+        }
+
+        function launchRandomAttack() {
+            const start = getRandomCoord();
+            const end = getRandomCoord();
+            
+            const vStart = latLonToVector3(start.lat, start.lon, 5);
+            const vEnd = latLonToVector3(end.lat, end.lon, 5);
+
+            // 1. Create Curve
+            // Calculate a control point (midpoint projected outward) for the arc
+            const dist = vStart.distanceTo(vEnd);
+            const mid = vStart.clone().add(vEnd).multiplyScalar(0.5);
+            mid.normalize().multiplyScalar(5 + dist * 0.5); // Arc height depends on distance
+
+            const curve = new THREE.QuadraticBezierCurve3(vStart, mid, vEnd);
+            const points = curve.getPoints(50);
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+
+            // Add progress attribute for the shader animation
+            const progress = new Float32Array(51); // 50 segments = 51 points
+            for(let i=0; i<51; i++) progress[i] = i/50;
+            geometry.setAttribute('aProgress', new THREE.BufferAttribute(progress, 1));
+
+            const material = new THREE.ShaderMaterial({
+                uniforms: { uTime: { value: 0 } },
+                vertexShader: document.getElementById('arcVertex').textContent,
+                fragmentShader: document.getElementById('arcFragment').textContent,
+                transparent: true,
+                depthTest: false,
+                blending: THREE.AdditiveBlending
+            });
+
+            const line = new THREE.Line(geometry, material);
+            scene.add(line);
+            
+            // Store meta data for animation/cleanup
+            const attackData = {
+                mesh: line,
+                startTime: performance.now() / 1000,
+                duration: 2.0, // seconds to travel
+                targetUV: { 
+                    x: (end.lon + 180) / 360, 
+                    y: (end.lat + 90) / 180 
+                }
+            };
+            attackLines.push(attackData);
+
+            // Cleanup after animation
+            setTimeout(() => {
+                scene.remove(line);
+                attackLines = attackLines.filter(a => a !== attackData);
+                triggerRipple(attackData.targetUV);
+            }, 2000);
+        }
+
+        function triggerRipple(uv) {
+            // Find an empty slot or overwrite old one in uniforms
+            // For simplicity, we cycle through slots 0-9
+            const time = performance.now() / 1000;
+            const slot = Math.floor(time * 10) % 10; 
+            
+            impacts[slot].set(uv.x, uv.y, time, 1.0); // w=1 means active
+        }
+
+
+        // --- INTERACTIVITY (RAYCASTER) ---
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        const terminal = document.getElementById('terminal');
+        const termContent = document.getElementById('term-content');
+
+        function onMouseMove(event) {
+            // Update Mouse
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            // Raycast
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(globe);
+
+            if (intersects.length > 0) {
+                // Show Terminal
+                const point = intersects[0].point;
+                updateTerminal(event.clientX, event.clientY, point);
+                document.body.style.cursor = 'crosshair';
+            } else {
+                terminal.style.display = 'none';
+                document.body.style.cursor = 'default';
+            }
+        }
+
+        function updateTerminal(x, y, vec3) {
+            terminal.style.display = 'block';
+            terminal.style.left = (x + 20) + 'px';
+            terminal.style.top = (y + 20) + 'px';
+
+            // Generate "random" data
+            if(Math.random() > 0.9) {
+                const log = LOGS[Math.floor(Math.random() * LOGS.length)];
+                const div = document.createElement('div');
+                div.innerHTML = `> ${log} <span class="cursor"></span>`;
+                div.style.color = Math.random() > 0.8 ? '#ff3333' : '#00ff41'; // Occasional red alert
+                
+                termContent.appendChild(div);
+                if(termContent.children.length > 5) termContent.removeChild(termContent.children[0]);
+            }
+        }
+
+        function onResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- ANIMATION LOOP ---
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+
+            const time = performance.now() / 1000;
+
+            // Update Globe Shader
+            if(globe) {
+                globe.material.uniforms.uTime.value = time;
+                globe.material.uniforms.uImpacts.value = impacts;
+            }
+
+            // Update Attack Lines
+            attackLines.forEach(attack => {
+                // We offset uTime by start time so the "packet" starts at 0 progress
+                // But since our shader loops based on global time, we rely on the shader's modulo
+                // A simpler way for the shader:
+                attack.mesh.material.uniforms.uTime.value = time - attack.startTime;
+            });
+
+            renderer.render(scene, camera);
+        }
+
+        init();
+
+    </script>
+</body>
+</html>
